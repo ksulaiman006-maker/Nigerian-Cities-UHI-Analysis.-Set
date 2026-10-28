@@ -1,0 +1,267 @@
+rm(list=ls())
+gc()
+gc()
+memory.size()
+
+library(rgdal)
+library(raster)
+library(terra)
+library(matrixStats)
+library(trend)
+library(data.table)
+
+setwd("C:\\Urban heat island\\UHI RESEARCH\\Data")
+
+datIx<-data.frame(fread("Corrected_Aba_DLST.csv"))
+datI <- datIx[, 3:ncol(datIx)] - 273.15
+pos<-datIx[,1:2]
+
+##################################################################
+			# 1st and 2nd Part Maps #
+##################################################################
+
+dt<-colnames(datI)
+
+yr<-substr(dt,2,5)
+mn<-substr(dt,7,8)
+dy<-substr(dt,10,11)
+
+
+dat1<-datI[,which(yr>=2001 & yr<=2012)]
+dat2<-datI[,which(yr>=2013 & yr<=2023)]
+
+dat1m<-data.frame(rowMeans(dat1, na.rm=TRUE))
+dat1mm<-cbind(pos,dat1m)
+
+dat2m<-data.frame(rowMeans(dat2, na.rm=TRUE))
+dat2mm<-cbind(pos,dat2m)
+
+#setwd("D:\\UHI_Research\\Results")
+#fwrite(dat1mm,"Abad_DLST_1.csv")
+#fwrite(dat2mm,"Abad_DLST_2.csv")
+
+
+### All year LST Average ###
+
+datav<-data.frame(rowMeans(datI, na.rm=TRUE))
+datavA<-cbind(pos,datav)
+#setwd("D:\\UHI_Research\\Results")
+#fwrite(datavA,"Abad_DLST_Complete.csv")
+
+#################################################################
+
+setwd("D:\\UHI_Research\\Figures")
+
+png("Aba_decade.png", width=1800, height = 2400, res=300)
+
+par(mfrow = c(1,2), mar=c(2,2,2,2))
+
+D1<-rast(dat1mm)
+D2<-rast(dat2mm)
+
+br<-seq(26.5,35.5,0.45)
+pal <- colorRampPalette(c("darkgreen","green","lightgreen","yellow","red","darkred"))(length(br))
+plot(D1,breaks=br,col=pal,axes=F,box=F, main = "2001-12")
+plot(D2,breaks=br,col=pal,axes=F,box=F, main = "2013-23")
+
+dev.off()
+
+##################################################################
+				# Profile Study #
+##################################################################
+
+setwd("D:\\UHI_Research\\Results")
+
+datA<-data.frame(fread("Aba_DLST_Complete.csv"))
+
+#datAr<-rast(datA)
+
+
+##### Profile for Aba ####
+xym <- cbind(c(7.20,7.50), c(5.095,5.095)) 
+p = Line(xym);ps = Lines(list(p),1); lns1 = SpatialLines(list(ps));lns1$ID <- c("1")
+
+xym <- cbind(c(7.37,7.37), c(5.00,5.25))
+p = Line(xym);ps = Lines(list(p),1); lns2 = SpatialLines(list(ps));lns2$ID <- c("2")
+
+
+############### Spatial Profile Analysis #########################
+
+#brks <- c(seq(round(min(datA[,3], na.rm = TRUE), 1), round(max(datA[,3], na.rm = TRUE), 1), 1))
+brks<-seq(27.0,35.2,0.41)
+cols <- colorRampPalette(c("darkgreen","green","green","yellow","red","darkred"))(length(brks))
+
+setwd("D:\\UHI_Research\\Figures")
+png("WinterProfileDay2021.png",width=1812,height=3750,res=375)
+par(mfrow=c(3,1),mar=c(5,5,2,4))
+
+#rydat<-rast(datA)
+rydat<-rasterFromXYZ(datA)
+plot(rydat,breaks=brks,col=cols)
+plot(lns1,add=T); plot(lns2,add=T)
+
+pdat1<-rev(extract(rydat,lns1)[[1]])
+pdat2<-rev(extract(rydat,lns2)[[1]])
+
+plot(pdat1,main=paste("X-Axis:"),ylab="Temperature (C)", xlab="Distance (km)");lines(pdat1)
+plot(pdat2,main=paste("Y-Axis:"),ylab="Temperature (C)", xlab="Distance (km)");lines(pdat2)
+
+dev.off()
+
+
+######################### Yearly Profile ################################
+setwd("D:\\UHI_Research\\Results")
+datP<-data.frame(fread("Abaa_DLST_Yearly.csv"))
+
+datp_01<-cbind(datP[,1:2],datP[,3])
+rdatp_01<-rasterFromXYZ(datp_01)
+pdat1_01<-rev(extract(rydat,lns1)[[1]]) #x-axis 
+pdat2_01<-rev(extract(rydat,lns2)[[1]]) #y-axis
+
+
+
+####x-axis
+ 
+for (i in 3:ncol(datP)){
+
+datp_01<-cbind(datP[,1:2],datP[,i])
+rdatp_01<-rasterFromXYZ(datp_01)
+pdat1_01<-rev(extract(rdatp_01,lns1)[[1]]) #x-axis 
+
+if (i==3) datpp1<-pdat1_01
+if (i>3) datpp1<-cbind(datpp1,pdat1_01)
+}
+
+colnames(datpp1)<-2001:2023
+datpp1<-data.frame(datpp1)
+
+######### Yearly Profile Plot ############
+y01xa<-datpp1[,5]
+y05xa<-datpp1[,5]
+y10xa<-datpp1[,10]
+y15xa<-datpp1[,15]
+y20xa<-datpp1[,20]
+y23xa<-datpp1[,23]
+
+
+dif_xa <- data.frame(y01xa, y05xa, y10xa, y15xa, y20xa, y23xa)
+
+# Step 3: Create the initial plot for the first variable (y05xa)
+plot(y05xa, type = "o", col = 1, xlab = "X-Axis", ylab = "LST", 
+     main = "5 Year", ylim = range(dif_xa, na.rm = TRUE))
+
+# Step 4: Add lines for the other variables
+for (i in 2:ncol(dif_xa)) {
+  lines(dif_xa[,i], type = "o", col = i)
+}
+
+# Step 5: Add a legend
+legend("topright", legend = c("y01xa", "y05xa", "y10xa", "y15xa", "y20xa", "y23xa"), 
+       col = 1:ncol(dif_xa), lty = 1, pch = 1, cex = 0.8)
+
+
+########## Diff Plot #######
+
+y05xb<-datpp1[,5]-datpp1[,1]
+y10xb<-datpp1[,10]-datpp1[,1]
+y15xb<-datpp1[,15]-datpp1[,1]
+y20xb<-datpp1[,20]-datpp1[,1]
+y23xb<-datpp1[,23]-datpp1[,1]
+
+
+dif_xb <- data.frame(y05xb, y10xb, y15xb, y20xb, y23xb)
+
+# Step 3: Create the initial plot for the first difference (y05)
+plot(y05xb, type = "o", col = 1, xlab = "Index", ylab = "Difference", 
+     main = "Differences Over Time", ylim = range(diff_data, na.rm = TRUE))
+# Step 4: Add lines for the other differences
+for (i in 2:ncol(dif_xb)) {
+  lines(diff_data[,i], type = "o", col = i)
+}
+# Step 5: Add a legend
+legend("topright", legend = c("y05", "y10", "y15", "y20", "y23"), 
+       col = 1:ncol(diff_data), lty = 1, pch = 1, cex = 0.8)
+
+
+########################################################
+			### Start from here ###
+########################################################
+
+#### y-axis ####
+pdat2_01<-rev(extract(rydat,lns2)[[1]]) #y-axis
+
+for (i in 3:ncol(datP)){
+
+datp_02<-cbind(datP[,1:2],datP[,i])
+rdatp_02<-rasterFromXYZ(datp_01)
+pdat2_02<-rev(extract(rydat,lns2)[[1]]) #y-axis
+
+if (i==3) datpp2<-pdat2_02
+if (i>3) datpp2<-cbind(datpp2,pdat2_02)
+}
+
+colnames(datpp2)<-2001:2023
+datpp2<-data.frame(datpp2)
+
+
+
+
+
+
+##################################################################
+			# Trend Analysis #
+##################################################################
+
+# datI is the data without the pos
+# dat is the data frame
+
+
+ch <- colnames(datI)
+yr<-substr(ch,2,5)
+
+for(i in 2001:2023){
+ydat<-data.frame(datI[,(which(yr==i))])
+ydatm <- data.frame(rowMeans(ydat, na.rm = TRUE))
+
+
+if (i==2001) Ydat<-ydatm
+if (i>2001)  Ydat<-cbind(Ydat,ydatm)
+print(i); flush.console()
+
+}
+colnames(Ydat)<-c(2001:2023)
+
+#setwd("D:\\UHI_Research\\Results")
+#fwrite(cbind(pos,Ydat),"Abaa_DLST_Yearly.csv")
+
+######## Trend Analysis ###############
+setwd("D:\\UHI_Research\\Results")
+Tdat<-fread("Abaa_DLST_Yearly.csv")
+Tdat<-data.frame(Tdat[,3:ncol(Tdat)])
+
+for (i in 1:nrow(Tdat)) {
+dif <- as.numeric(Tdat[i, ])
+ 
+#Calculate Sen's slope and Mann-Kendall test p-value
+sen <- sens.slope(dif)
+mk <- mk.test(dif)
+cng <- c(sen$estimates, mk$p.value)
+ 
+if(i==1) Cng<-cng
+if(i>1) Cng<-rbind(Cng,cng)
+flush.console();print(i)
+}
+
+colnames(Cng) <- c("Slope", "p_value")
+
+fwrite(Cng,"Abaa_Trend.csv")
+
+
+
+
+
+
+
+
+
+
